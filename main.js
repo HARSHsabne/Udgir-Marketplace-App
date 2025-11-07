@@ -1,24 +1,23 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, setLogLevel, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-// NEW: Import necessary Firebase Storage modules
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.4/dist/module/supabase.js";
 
 // Global State Variables (using global Canvas variables where available)
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// NOTE: firebaseConfig now holds Supabase URL and Anon Key
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-let db, auth, storage, userId = null; // Added 'storage'
-let listingsRef = null;
+// Supabase State Variables
+let supabase, userId = null; 
 let currentListings = [];
 let currentFilter = 'All';
+const LISTINGS_TABLE = 'listings'; // Supabase Table Name
+const BUCKET_NAME = 'listing_images'; // Supabase Storage Bucket Name
 
 // =================================================================
-// Custom Message/Toast Function
+// Custom Message/Toast Function (REMAINS THE SAME)
 // =================================================================
 function showMessage(title, message, type = 'success') {
+    // ... (Your original showMessage function code remains here)
     const toast = document.getElementById('message-toast');
     const titleEl = document.getElementById('toast-title');
     const messageEl = document.getElementById('toast-message');
@@ -42,21 +41,18 @@ function showMessage(title, message, type = 'success') {
     titleEl.textContent = title;
     messageEl.textContent = message;
     
-    // Re-render icon (since this function needs the icon path logic)
     const iconName = iconEl.getAttribute('data-lucide');
     iconEl.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-${iconName.toLowerCase()}"><path d="${getIconPath(iconName)}"/></svg>`;
     
     toast.classList.remove('hidden');
     toast.classList.add('toast-show');
 
-    // Hide after 4 seconds
     setTimeout(() => {
         toast.classList.remove('toast-show');
         toast.classList.add('hidden');
     }, 4000);
 }
 
-// Helper function to get Lucide icon SVG paths (minimal subset)
 function getIconPath(name) {
     switch (name) {
         case 'CheckCircle': return 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M12 2v10 M12 12l2-2 M12 12l-2-2';
@@ -67,61 +63,84 @@ function getIconPath(name) {
 
 
 // =================================================================
-// Firebase Initialization and Authentication
+// Supabase Initialization and Authentication (UPDATED)
 // =================================================================
-async function initFirebase() {
+async function initSupabase() {
     try {
-        if (Object.keys(firebaseConfig).length > 0) {
-            setLogLevel('Debug');
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            // NEW: Initialize storage
-            storage = getStorage(app); 
-            auth = getAuth(app);
+        const supabaseUrl =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmFlZ29iZmVwcWZ3Y3R1ZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NDUzNTUsImV4cCI6MjA3ODAyMTM1NX0.l5l-lceMGvK7jp_DUV8lXlRofg_7SurOfaE28EZ0xTI; // Re-purposing projectId for URL
+        const supabaseAnonKey = https://arnaegobfepqfwctudpw.supabase.co; // Re-purposing apiKey for Anon Key
 
-            // Sign in and set up listener
+        if (supabaseUrl && supabaseAnonKey) {
+            // Initialize Supabase Client
+            supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+            // 1. Handle Authentication
+            let authResponse;
             if (initialAuthToken) {
-                await signInWithCustomToken(auth, initialAuthToken);
+                // Supabase doesn't use custom tokens like Firebase. This assumes 
+                // initialAuthToken is a JWT/session to set for an existing user.
+                // For a true token-based sign-in, you'd need a backend to exchange 
+                // the token for a Supabase session. Here, we just set the session.
+                const { error: sessionError } = await supabase.auth.setSession({
+                    access_token: initialAuthToken,
+                    refresh_token: null // Assuming a one-time token for simplicity
+                });
+                if (sessionError) throw sessionError;
+                authResponse = await supabase.auth.getUser();
+
             } else {
-                await signInAnonymously(auth);
+                // Sign in Anonymously (creates a new user if one doesn't exist)
+                authResponse = await supabase.auth.signInAnonymously();
             }
 
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    userId = user.uid;
+            if (authResponse.error) throw authResponse.error;
+            const user = authResponse.data.user;
+
+            // 2. Setup Auth Listener (Supabase style)
+            supabase.auth.onAuthStateChange((event, session) => {
+                const currentUser = session?.user;
+                if (currentUser) {
+                    userId = currentUser.id;
                     document.getElementById('user-id-display').textContent = `Your ID: ${userId}`;
                     document.getElementById('user-id-display').classList.remove('hidden');
 
-                    // Set up public collection reference and start listening
-                    listingsRef = collection(db, `artifacts/${appId}/public/data/listings`);
                     setupRealTimeListings();
                 } else {
                     console.warn("User state changed, but no user is signed in.");
                 }
             });
 
+            // If sign-in was successful initially, set up the listener immediately
+            if (user) {
+                 userId = user.id;
+                 document.getElementById('user-id-display').textContent = `Your ID: ${userId}`;
+                 document.getElementById('user-id-display').classList.remove('hidden');
+                 setupRealTimeListings();
+            }
+
+
         } else {
-            console.error("Firebase config is empty. Data persistence is disabled.");
+            console.error("Supabase config is incomplete. Data persistence is disabled.");
             showMessage('Error', 'Database configuration missing.', 'error');
             document.getElementById('loading-message').textContent = 'Database configuration missing. Displaying static content only.';
         }
     } catch (error) {
-        console.error("Firebase initialization failed:", error);
-        showMessage('Error', `Firebase Init Error: ${error.message.substring(0, 50)}...`, 'error');
+        console.error("Supabase initialization failed:", error);
+        showMessage('Error', `Supabase Init Error: ${error.message.substring(0, 50)}...`, 'error');
     }
 }
 
+
 // =================================================================
-// Listing Rendering Functions
+// Listing Rendering Functions (REMAINS MOSTLY THE SAME)
 // =================================================================
 
-// Helper for default image URL if none is provided
 const DEFAULT_IMAGE_URL = 'https://placehold.co/192x192/0E7490/ffffff?text=No+Image';
 
 function renderListingCard(listing) {
-    // Determine the image source, falling back to a default if the URL is empty or null
+    // Note: Supabase timestamp comes as a string, no .toDate() needed
     const imageSrc = listing.imageUrl && listing.imageUrl.trim() !== '' ? listing.imageUrl : DEFAULT_IMAGE_URL;
-    const date = listing.timestamp?.toDate ? listing.timestamp.toDate().toLocaleDateString() : 'N/A';
+    const date = new Date(listing.timestamp).toLocaleDateString();
     const priceFormatted = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(listing.price);
     
     return `
@@ -149,13 +168,12 @@ function renderListingCard(listing) {
 function renderListings(listings) {
     const container = document.getElementById('listings-container');
     const loadingMessage = document.getElementById('loading-message');
-    container.innerHTML = ''; // Clear previous listings
+    container.innerHTML = ''; 
 
     if (loadingMessage) {
         loadingMessage.style.display = 'none';
     }
 
-    // Apply filter
     const filteredListings = currentFilter === 'All' 
         ? listings 
         : listings.filter(l => l.category === currentFilter);
@@ -165,46 +183,70 @@ function renderListings(listings) {
         return;
     }
 
+    // Listings are already sorted by the Supabase query
     filteredListings.forEach(listing => {
         container.insertAdjacentHTML('beforeend', renderListingCard(listing));
     });
-    // Re-render lucide icons after injecting new HTML
+    
     if (window.lucide && window.lucide.createIcons) {
         window.lucide.createIcons();
     }
 }
 
+
 // =================================================================
-// Real-Time Listener and Filtering
+// Real-Time Listener and Filtering (UPDATED for Supabase Realtime)
 // =================================================================
 function setupRealTimeListings() {
-    if (listingsRef) {
-        // Query: Fetching all public listings.
-        onSnapshot(query(listingsRef), (snapshot) => {
-            const tempListings = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                tempListings.push({ id: doc.id, ...data });
+    if (supabase) {
+        // 1. Initial Fetch and Setup Realtime Subscription
+        supabase
+            .from(LISTINGS_TABLE)
+            .select('*')
+            .order('timestamp', { ascending: false }) // Sort by latest first
+            .then(({ data, error }) => {
+                if (error) throw error;
+                currentListings = data;
+                renderListings(currentListings);
+            })
+            .catch(error => {
+                console.error("Error fetching initial listings:", error);
+                showMessage('Error', 'Failed to load initial listings.', 'error');
             });
-            
-            // Sort listings by timestamp in memory (latest first)
-            tempListings.sort((a, b) => {
-                const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
-                const timeB = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
-                return timeB - timeA;
+
+
+        // 2. Realtime Subscription for subsequent changes
+        // Use a unique channel for the application
+        const channelName = `public_listings_changes_${appId}`;
+        supabase
+            .channel(channelName)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: LISTINGS_TABLE },
+                (payload) => {
+                    // Refetch all data to maintain consistent order/state, 
+                    // or implement local state mutation (for complex apps)
+                    supabase
+                        .from(LISTINGS_TABLE)
+                        .select('*')
+                        .order('timestamp', { ascending: false })
+                        .then(({ data, error }) => {
+                            if (error) throw error;
+                            currentListings = data;
+                            renderListings(currentListings);
+                        })
+                        .catch(error => console.error("Realtime update error:", error));
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log("Supabase Realtime Subscribed!");
+                }
             });
-            
-            currentListings = tempListings;
-            renderListings(currentListings);
-        }, (error) => {
-            console.error("Error listening to listings:", error);
-            showMessage('Error', 'Failed to load listings. Connection error.', 'error');
-            document.getElementById('loading-message').textContent = 'Failed to load listings.';
-        });
     }
 }
 
-// Expose functions globally so they can be called from the HTML `onclick` attributes
+// Expose functions globally so they can be called from the HTML `onclick` attributes (REMAINS THE SAME)
 window.filterCategory = function(category) {
     currentFilter = category;
     window.switchTab('buy');
@@ -213,39 +255,45 @@ window.filterCategory = function(category) {
 }
 
 // =================================================================
-// File Upload Utility Function
+// File Upload Utility Function (UPDATED for Supabase Storage)
 // =================================================================
 
 /**
- * Uploads a file to Firebase Storage and returns the download URL.
+ * Uploads a file to Supabase Storage and returns the download URL.
  * @param {File} file The image file to upload.
  * @param {string} userId The current user ID.
  * @returns {Promise<string>} The public URL of the uploaded image.
  */
 async function uploadImage(file, userId) {
-    if (!storage) {
-        throw new Error("Firebase Storage not initialized.");
+    if (!supabase) {
+        throw new Error("Supabase client not initialized.");
     }
     
     // Create a unique file name
     const timestamp = Date.now();
-    const fileName = `${userId}_${timestamp}_${file.name}`;
-    
-    // Create a reference to the storage location
-    // Path: /artifacts/{appId}/images/listings/{userId}_{timestamp}_{filename}
-    const storageRef = ref(storage, `artifacts/${appId}/images/listings/${fileName}`);
+    // Path: images/listings/{userId}_{timestamp}_{filename}
+    const filePath = `images/listings/${userId}_${timestamp}_${file.name}`;
     
     // Upload the file
-    const snapshot = await uploadBytes(storageRef, file);
+    const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(filePath, file);
+
+    if (error) {
+        throw error;
+    }
     
     // Get the public download URL
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    return downloadURL;
+    const { data: publicUrlData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+
+    return publicUrlData.publicUrl;
 }
 
 
 // =================================================================
-// Form Submission Logic (Updated for Image Upload)
+// Form Submission Logic (UPDATED for Supabase Insert)
 // =================================================================
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('listing-form');
@@ -262,10 +310,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const category = document.getElementById('category').value;
             const price = parseFloat(document.getElementById('price').value);
             const description = document.getElementById('description').value;
-            const imageFile = document.getElementById('imageFile').files[0]; // Get the uploaded file
-            let imageUrl = document.getElementById('imageUrl').value.trim(); // Get the optional URL
+            const imageFile = document.getElementById('imageFile').files[0]; 
+            let imageUrl = document.getElementById('imageUrl').value.trim(); 
 
-            // Input Validation
             if (price <= 0) {
                  showMessage('Input Error', 'Price must be greater than zero.', 'error');
                  return;
@@ -278,7 +325,6 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 // 1. Handle File Upload if present
                 if (imageFile) {
-                    // Maximum file size check (5MB)
                     if (imageFile.size > 5 * 1024 * 1024) {
                         showMessage('Upload Error', 'Image file is too large (max 5MB).', 'error');
                         postButton.disabled = false;
@@ -286,22 +332,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     
-                    // Upload the file and get the permanent URL
                     imageUrl = await uploadImage(imageFile, userId);
                     postButton.textContent = 'Saving Listing...';
                 }
 
-                // 2. Save Listing to Firestore
-                if (db && listingsRef) {
-                    await addDoc(listingsRef, {
-                        title: title,
-                        category: category,
-                        price: price,
-                        description: description,
-                        imageUrl: imageUrl, // Will be uploaded URL, or user-provided URL, or empty string
-                        sellerId: userId,
-                        timestamp: new Date()
-                    });
+                // 2. Save Listing to Supabase
+                if (supabase) {
+                    const { error } = await supabase
+                        .from(LISTINGS_TABLE)
+                        .insert([
+                            {
+                                title: title,
+                                category: category,
+                                price: price,
+                                description: description,
+                                imageUrl: imageUrl, 
+                                sellerId: userId,
+                                timestamp: new Date().toISOString() // Supabase prefers ISO string
+                            }
+                        ]);
+
+                    if (error) throw error;
 
                     showMessage('Success!', 'Your listing has been posted and is now live!', 'success');
                     e.target.reset();
@@ -313,7 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             } catch (error) {
                 console.error("Error during posting or upload: ", error);
-                showMessage('Error', `Failed to post listing. Upload error: ${error.message.substring(0, 50)}...`, 'error');
+                showMessage('Error', `Failed to post listing. Error: ${error.message.substring(0, 50)}...`, 'error');
             } finally {
                 postButton.disabled = false;
                 postButton.textContent = 'Post Listing';
@@ -321,9 +372,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
     // =================================================================
-    // Tab Switching Logic
+    // Tab Switching Logic (REMAINS THE SAME)
     // =================================================================
     window.switchTab = function(tabName) {
         const tabs = [
@@ -337,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tab.button.classList.remove('border-transparent', 'text-gray-600');
                 tab.content.classList.remove('hidden');
                 if (tabName === 'buy') {
-                    renderListings(currentListings); // Re-render when switching to buy
+                    renderListings(currentListings); 
                 }
             } else {
                 tab.button.classList.remove('border-teal-500', 'text-teal-600', 'active-tab');
@@ -347,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Initialize Firebase and set default tab on load
-    initFirebase();
+    // Initialize Supabase and set default tab on load
+    initSupabase();
     window.switchTab('buy');
 });
