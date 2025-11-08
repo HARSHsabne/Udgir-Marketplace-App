@@ -7,7 +7,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 // Supabase State Variables
-let supabase, userId = null; 
+let supabase, userId = null;
 let currentListings = [];
 let currentFilter = 'All';
 const LISTINGS_TABLE = 'listings'; // Supabase Table Name
@@ -63,35 +63,32 @@ function getIconPath(name) {
 
 
 // =================================================================
-// Supabase Initialization and Authentication (UPDATED)
+// Supabase Initialization and Authentication (FIXED CONFIG)
 // =================================================================
 async function initSupabase() {
-    try {
-        // NOTE: Replace the placeholder values below with your actual Supabase URL and Anon Key
-        const supabaseUrl = 'https://arnaegobfepqfwctudpw.supabase.co'; // <--- THIS is the URL
-        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmFlZ29iZmVwcWZ3Y3R1ZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NDUzNTUsImV4cCI6MjA3ODAyMTM1NX0.l5l-lceMGvK7jp_DUV8lXlRofg_7SurOfaE28EZ0xTI'; // <--- THIS is the Key
+    try {
+        // NOTE: Supabase URL and Anon Key are correctly assigned here.
+        const supabaseUrl = 'https://arnaegobfepqfwctudpw.supabase.co'; // <--- URL
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmFlZ29iZmVwcWZ3Y3R1ZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NDUzNTUsImV4cCI6MjA3ODAyMTM1NX0.l5l-lceMGvK7jp_DUV8lXlRofg_7SurOfaE28EZ0xTI'; // <--- Key
 
-        if (supabaseUrl && supabaseAnonKey) {
-            // This will now correctly initialize the client
-            supabase = createClient(supabaseUrl, supabaseAnonKey);
-// ...
+        if (supabaseUrl && supabaseAnonKey) {
+            // Initialize Supabase Client
+            supabase = createClient(supabaseUrl, supabaseAnonKey);
 
             // 1. Handle Authentication
             let authResponse;
             if (initialAuthToken) {
                 // Supabase doesn't use custom tokens like Firebase. This assumes 
                 // initialAuthToken is a JWT/session to set for an existing user.
-                // For a true token-based sign-in, you'd need a backend to exchange 
-                // the token for a Supabase session. Here, we just set the session.
                 const { error: sessionError } = await supabase.auth.setSession({
                     access_token: initialAuthToken,
-                    refresh_token: null // Assuming a one-time token for simplicity
+                    refresh_token: null
                 });
                 if (sessionError) throw sessionError;
                 authResponse = await supabase.auth.getUser();
 
             } else {
-                // Sign in Anonymously (creates a new user if one doesn't exist)
+                // Sign in Anonymously
                 authResponse = await supabase.auth.signInAnonymously();
             }
 
@@ -114,10 +111,10 @@ async function initSupabase() {
 
             // If sign-in was successful initially, set up the listener immediately
             if (user) {
-                 userId = user.id;
-                 document.getElementById('user-id-display').textContent = `Your ID: ${userId}`;
-                 document.getElementById('user-id-display').classList.remove('hidden');
-                 setupRealTimeListings();
+                userId = user.id;
+                document.getElementById('user-id-display').textContent = `Your ID: ${userId}`;
+                document.getElementById('user-id-display').classList.remove('hidden');
+                setupRealTimeListings();
             }
 
 
@@ -227,7 +224,6 @@ function setupRealTimeListings() {
                 { event: '*', schema: 'public', table: LISTINGS_TABLE },
                 (payload) => {
                     // Refetch all data to maintain consistent order/state, 
-                    // or implement local state mutation (for complex apps)
                     supabase
                         .from(LISTINGS_TABLE)
                         .select('*')
@@ -255,6 +251,33 @@ window.filterCategory = function(category) {
     renderListings(currentListings);
     document.getElementById('listings').scrollIntoView({ behavior: 'smooth' });
 }
+
+// =================================================================
+// Tab Switching Logic (MOVED TO GLOBAL SCOPE - FIX FOR REFERENCE ERROR)
+// =================================================================
+// FIX: Define switchTab globally so the HTML onclick can access it immediately.
+window.switchTab = function(tabName) {
+    const tabs = [
+        { name: 'buy', button: document.getElementById('buy_tab'), content: document.getElementById('buy_content') },
+        { name: 'sell', button: document.getElementById('sell_tab'), content: document.getElementById('sell_content') }
+    ];
+
+    tabs.forEach(tab => {
+        if (tab.name === tabName) {
+            tab.button.classList.add('border-teal-500', 'text-teal-600', 'active-tab');
+            tab.button.classList.remove('border-transparent', 'text-gray-600');
+            tab.content.classList.remove('hidden');
+            if (tabName === 'buy') {
+                renderListings(currentListings); 
+            }
+        } else {
+            tab.button.classList.remove('border-teal-500', 'text-teal-600', 'active-tab');
+            tab.button.classList.add('border-transparent', 'text-gray-600');
+            tab.content.classList.add('hidden');
+        }
+    });
+}
+
 
 // =================================================================
 // File Upload Utility Function (UPDATED for Supabase Storage)
@@ -316,8 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
             let imageUrl = document.getElementById('imageUrl').value.trim(); 
 
             if (price <= 0) {
-                 showMessage('Input Error', 'Price must be greater than zero.', 'error');
-                 return;
+                showMessage('Input Error', 'Price must be greater than zero.', 'error');
+                return;
             }
 
             const postButton = document.getElementById('post-button');
@@ -373,34 +396,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    // =================================================================
-    // Tab Switching Logic (REMAINS THE SAME)
-    // =================================================================
-    window.switchTab = function(tabName) {
-        const tabs = [
-            { name: 'buy', button: document.getElementById('buy_tab'), content: document.getElementById('buy_content') },
-            { name: 'sell', button: document.getElementById('sell_tab'), content: document.getElementById('sell_content') }
-        ];
-
-        tabs.forEach(tab => {
-            if (tab.name === tabName) {
-                tab.button.classList.add('border-teal-500', 'text-teal-600', 'active-tab');
-                tab.button.classList.remove('border-transparent', 'text-gray-600');
-                tab.content.classList.remove('hidden');
-                if (tabName === 'buy') {
-                    renderListings(currentListings); 
-                }
-            } else {
-                tab.button.classList.remove('border-teal-500', 'text-teal-600', 'active-tab');
-                tab.button.classList.add('border-transparent', 'text-gray-600');
-                tab.content.classList.add('hidden');
-            }
-        });
-    }
     
     // Initialize Supabase and set default tab on load
     initSupabase();
+    // This call is now safe because window.switchTab is defined above.
     window.switchTab('buy');
 });
-
