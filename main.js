@@ -1,4 +1,4 @@
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/supabase-js.mjs";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/supabase-js.mjs"; // FIX: Use the stable ES Module path
 
 // Global State Variables (using global Canvas variables where available)
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -14,7 +14,7 @@ const LISTINGS_TABLE = 'listings'; // Supabase Table Name
 const BUCKET_NAME = 'listing_images'; // Supabase Storage Bucket Name
 
 // =================================================================
-// Custom Message/Toast Function (REMAINS THE SAME)
+// Custom Message/Toast Function
 // =================================================================
 function showMessage(title, message, type = 'success') {
     // ... (Your original showMessage function code remains here)
@@ -42,7 +42,13 @@ function showMessage(title, message, type = 'success') {
     messageEl.textContent = message;
     
     const iconName = iconEl.getAttribute('data-lucide');
-    iconEl.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-${iconName.toLowerCase()}"><path d="${getIconPath(iconName)}"/></svg>`;
+    // FIX: Ensure icon path is found before attempting to inject SVG
+    const path = getIconPath(iconName);
+    if (path) {
+        iconEl.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-${iconName.toLowerCase()}"><path d="${path}"/></svg>`;
+    } else {
+         console.warn(`Icon path for ${iconName} not found.`);
+    }
     
     toast.classList.remove('hidden');
     toast.classList.add('toast-show');
@@ -53,10 +59,13 @@ function showMessage(title, message, type = 'success') {
     }, 4000);
 }
 
+// FIX: Added missing icon paths for DollarSign and MapPin
 function getIconPath(name) {
     switch (name) {
         case 'CheckCircle': return 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M12 2v10 M12 12l2-2 M12 12l-2-2';
         case 'XCircle': return 'M15 9l-6 6 M9 9l6 6 M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z';
+        case 'DollarSign': return 'M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6 M18 21v-2 M6 5v2';
+        case 'MapPin': return 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6z';
         default: return '';
     }
 }
@@ -67,7 +76,7 @@ function getIconPath(name) {
 // =================================================================
 async function initSupabase() {
     try {
-        // NOTE: Supabase URL and Anon Key are correctly assigned here.
+        // FIX: Supabase URL and Anon Key are correctly assigned and quoted
         const supabaseUrl = 'https://arnaegobfepqfwctudpw.supabase.co'; // <--- URL
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmFlZ29iZmVwcWZ3Y3R1ZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NDUzNTUsImV4cCI6MjA3ODAyMTM1NX0.l5l-lceMGvK7jp_DUV8lXlRofg_7SurOfaE28EZ0xTI'; // <--- Key
 
@@ -78,8 +87,6 @@ async function initSupabase() {
             // 1. Handle Authentication
             let authResponse;
             if (initialAuthToken) {
-                // Supabase doesn't use custom tokens like Firebase. This assumes 
-                // initialAuthToken is a JWT/session to set for an existing user.
                 const { error: sessionError } = await supabase.auth.setSession({
                     access_token: initialAuthToken,
                     refresh_token: null
@@ -131,7 +138,7 @@ async function initSupabase() {
 
 
 // =================================================================
-// Listing Rendering Functions (REMAINS MOSTLY THE SAME)
+// Listing Rendering Functions
 // =================================================================
 
 const DEFAULT_IMAGE_URL = 'https://placehold.co/192x192/0E7490/ffffff?text=No+Image';
@@ -194,7 +201,7 @@ function renderListings(listings) {
 
 
 // =================================================================
-// Real-Time Listener and Filtering (UPDATED for Supabase Realtime)
+// Real-Time Listener and Filtering
 // =================================================================
 function setupRealTimeListings() {
     if (supabase) {
@@ -244,7 +251,7 @@ function setupRealTimeListings() {
     }
 }
 
-// Expose functions globally so they can be called from the HTML `onclick` attributes (REMAINS THE SAME)
+// Expose functions globally so they can be called from the HTML `onclick` attributes
 window.filterCategory = function(category) {
     currentFilter = category;
     window.switchTab('buy');
@@ -280,7 +287,7 @@ window.switchTab = function(tabName) {
 
 
 // =================================================================
-// File Upload Utility Function (UPDATED for Supabase Storage)
+// File Upload Utility Function
 // =================================================================
 
 /**
@@ -318,7 +325,7 @@ async function uploadImage(file, userId) {
 
 
 // =================================================================
-// Form Submission Logic (UPDATED for Supabase Insert)
+// Form Submission Logic
 // =================================================================
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('listing-form');
@@ -399,9 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize Supabase and set default tab on load
     initSupabase();
-    // This call is now safe because window.switchTab is defined above.
+    // This call is now safe because window.switchTab is defined globally.
     window.switchTab('buy');
 });
-
-
-
