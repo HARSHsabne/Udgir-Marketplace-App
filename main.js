@@ -66,13 +66,15 @@ function getIconPath(name) {
 // Supabase Initialization and Authentication (UPDATED)
 // =================================================================
 async function initSupabase() {
-    try {
-        const supabaseUrl =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmFlZ29iZmVwcWZ3Y3R1ZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NDUzNTUsImV4cCI6MjA3ODAyMTM1NX0.l5l-lceMGvK7jp_DUV8lXlRofg_7SurOfaE28EZ0xTI; // Re-purposing projectId for URL
-        const supabaseAnonKey = https://arnaegobfepqfwctudpw.supabase.co; // Re-purposing apiKey for Anon Key
+    try {
+        // NOTE: Replace the placeholder values below with your actual Supabase URL and Anon Key
+        const supabaseUrl = 'https://arnaegobfepqfwctudpw.supabase.co'; // <--- THIS is the URL
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmFlZ29iZmVwcWZ3Y3R1ZHB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NDUzNTUsImV4cCI6MjA3ODAyMTM1NX0.l5l-lceMGvK7jp_DUV8lXlRofg_7SurOfaE28EZ0xTI'; // <--- THIS is the Key
 
-        if (supabaseUrl && supabaseAnonKey) {
-            // Initialize Supabase Client
-            supabase = createClient(supabaseUrl, supabaseAnonKey);
+        if (supabaseUrl && supabaseAnonKey) {
+            // This will now correctly initialize the client
+            supabase = createClient(supabaseUrl, supabaseAnonKey);
+// ...
 
             // 1. Handle Authentication
             let authResponse;
@@ -401,3 +403,4 @@ document.addEventListener('DOMContentLoaded', () => {
     initSupabase();
     window.switchTab('buy');
 });
+
