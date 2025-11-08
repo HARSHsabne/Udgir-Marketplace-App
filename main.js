@@ -1,4 +1,4 @@
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.4/supabase-js.mjs";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.js";
 
 // Global State Variables (using global Canvas variables where available)
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -402,4 +402,5 @@ document.addEventListener('DOMContentLoaded', () => {
     // This call is now safe because window.switchTab is defined above.
     window.switchTab('buy');
 });
+
 
